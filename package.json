@@ -1,0 +1,26 @@
+{
+  "name": "media-upload",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @media-upload/api --filter @media-upload/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "infra:up": "docker compose up -d postgres storage",
+    "infra:down": "docker compose down",
+    "setup": "pnpm --filter @media-upload/api db:migrate && pnpm --filter @media-upload/api storage:init",
+    "mobile": "pnpm --filter @media-upload/mobile start"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

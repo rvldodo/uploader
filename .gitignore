@@ -1,0 +1,12 @@
+node_modules
+dist
+.output
+.nitro
+.tanstack
+.vinxi
+*.tsbuildinfo
+.env
+.env.local
+coverage
+.DS_Store
+.gstack/

@@ -1,0 +1,79 @@
+# Local development stack.
+#
+#   pnpm infra:up                     → Postgres + S3-compatible storage only (run apps on the host)
+#   docker compose --profile app up   → everything, including api, worker and web
+#
+name: media-upload
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: media
+      POSTGRES_PASSWORD: media
+      POSTGRES_DB: media
+    # Host port 5433 avoids clashing with a locally installed Postgres.
+    ports: ["${POSTGRES_HOST_PORT:-5433}:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U media -d media"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # RustFS: Apache-2.0, S3-compatible object storage (stand-in for AWS S3 / R2 / GCS).
+  storage:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: media-dev
+      RUSTFS_SECRET_KEY: media-dev-secret
+    ports:
+      - "${STORAGE_HOST_PORT:-9000}:9000" # S3 API
+      - "9001:9001" # web console
+    volumes: [storage-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: runs DB migrations and provisions the bucket, then exits.
+  setup:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["sh", "-c", "node dist/migrate.js && node dist/init-storage.js"]
+    env_file: apps/api/.env.docker
+    depends_on:
+      postgres: { condition: service_healthy }
+      storage: { condition: service_healthy }
+
+  api:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["node", "dist/server.js"]
+    env_file: apps/api/.env.docker
+    ports: ["4000:4000"]
+    depends_on:
+      setup: { condition: service_completed_successfully }
+
+  worker:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ["node", "dist/worker.js"]
+    env_file: apps/api/.env.docker
+    depends_on:
+      setup: { condition: service_completed_successfully }
+
+  web:
+    profiles: [app]
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    environment:
+      API_URL: http://api:4000
+      # The local stack is plain http; never set this to false behind real HTTPS.
+      COOKIE_SECURE: "false"
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  postgres-data:
+  storage-data:
